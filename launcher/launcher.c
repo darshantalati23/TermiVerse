@@ -169,29 +169,69 @@ void eval(char *cmdline) {
         fprintf(stderr, "TermiVerse: Unknown command: '%s'. Use 'launch' or built-ins.\n", argv[0]);
     }
 }
-// --- parse_line: Parse command line into argv array ---
+// --- parse_line: Parse command line into argv array (State-Machine Version) ---
 int parse_line(char *buf, char **argv) {
     int bg = 0;
-    char *delim;
     int argc = 0;
+    char *p = buf;
+    
+    // State machine states
+    enum { WHITESPACE, IN_ARG, IN_QUOTE } state = WHITESPACE;
 
-    // Remove trailing newline
-    buf[strlen(buf) - 1] = ' ';
-
-    // Find and remove trailing '&' if it exists
-    if ((delim = strrchr(buf, '&'))) {
+    // --- Replace newline with space and find background '&' ---
+    buf[strlen(buf) - 1] = ' '; 
+    char *bg_char = strrchr(buf, '&');
+    if (bg_char) {
         bg = 1;
-        *delim = ' ';
+        *bg_char = ' '; // Remove it
     }
 
-    // Tokenize the string
-    char *token = strtok(buf, " \t");
-    while (token != NULL && argc < MAX_ARGS - 1) {
-        argv[argc++] = token;
-        token = strtok(NULL, " \t");
+    // --- Parse the command line ---
+    while (*p) {
+        switch(state) {
+            case WHITESPACE:
+                if (*p == ' ' || *p == '\t') {
+                    // Still in whitespace, null-terminate previous token
+                    *p++ = '\0';
+                } else if (*p == '"') {
+                    // Start of a quoted argument
+                    state = IN_QUOTE;
+                    argv[argc++] = ++p; // Save start of arg (after quote)
+                } else {
+                    // Start of a regular argument
+                    state = IN_ARG;
+                    argv[argc++] = p++;
+                }
+                break;
+
+            case IN_ARG:
+                if (*p == ' ' || *p == '\t') {
+                    // End of the argument
+                    state = WHITESPACE;
+                    *p++ = '\0';
+                } else {
+                    // Continue in argument
+                    p++;
+                }
+                break;
+
+            case IN_QUOTE:
+                if (*p == '"') {
+                    // End of the quoted argument
+                    state = WHITESPACE;
+                    *p++ = '\0'; // Terminate arg at the quote
+                } else {
+                    // Continue in quote
+                    p++;
+                }
+                break;
+        }
+        
+        // Safety check
+        if (argc >= MAX_ARGS - 1) break;
     }
+
     argv[argc] = NULL; // Null-terminate the list
-
     return bg;
 }
 

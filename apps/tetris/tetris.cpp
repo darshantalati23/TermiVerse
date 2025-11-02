@@ -6,8 +6,10 @@
 #include <termios.h>
 #include <fcntl.h>
 #include <string>
-#include <signal.h>       // --- MODIFICATION: Added for signals
-#include <sys/select.h>   // --- MODIFICATION: Added for a better kbhit
+#include <signal.h>
+#include <sys/select.h>
+#include <libgen.h>         // --- MODIFICATION: For dirname()
+#include <linux/limits.h>   // --- MODIFICATION: For PATH_MAX
 
 using namespace std;
 
@@ -17,7 +19,7 @@ using namespace std;
 #define GHOST "\u2591\u2591"
 #define EMPTY "  "
 
-// --- MODIFICATION: Added all ANSI colors ---
+// ANSI color codes
 #define ANSI_COLOR_RESET   "\x1b[0m"
 #define ANSI_COLOR_CYAN    "\x1b[36m"
 #define ANSI_COLOR_YELLOW  "\x1b[33m"
@@ -31,14 +33,18 @@ using namespace std;
 #define ANSI_COLOR_BOLD    "\x1b[1m"
 
 
-// --- MODIFICATION: Terminal control globals and functions ---
+// --- MODIFICATION: Global variable for our executable's directory ---
+string g_exe_dir_path;
+
+
+// --- Terminal control globals and functions ---
 struct termios orig_termios;
 bool rawModeEnabled = false;
 
 void disableRawMode() {
     if (!rawModeEnabled) return;
-    cout << "\033[?1049l"; // Restore main screen buffer
-    cout << "\033[?25h";   // Show cursor
+    cout << "\033[?1049l"; 
+    cout << "\033[?25h";   
     tcsetattr(STDIN_FILENO, TCSANOW, &orig_termios);
     rawModeEnabled = false;
 }
@@ -56,8 +62,8 @@ void enableRawMode() {
 
     tcsetattr(STDIN_FILENO, TCSANOW, &raw);
 
-    cout << "\033[?1049h"; // Use alternate screen buffer
-    cout << "\033[?25l";   // Hide cursor
+    cout << "\033[?1049h"; 
+    cout << "\033[?25l";   
     rawModeEnabled = true;
 }
 
@@ -79,12 +85,12 @@ int kbhit() {
     FD_SET(STDIN_FILENO, &fds);
     return select(STDIN_FILENO + 1, &fds, NULL, NULL, &tv);
 }
-// --- END OF MODIFIED TERMINAL CONTROL ---
 
 
 enum class TetrominoType { I, O, T, S, Z, J, L };
 
 class Tetromino {
+// (This class is unchanged)
 private:
     TetrominoType type;
     int rotation;
@@ -146,6 +152,7 @@ public:
     Grid() : grid(HEIGHT, vector<string>(WIDTH, "")) {}
 
     bool isCollision(const Tetromino& t) const {
+    // (This function is unchanged)
         for (size_t i = 0; i < t.getShape().size(); ++i) {
             for (size_t j = 0; j < t.getShape()[i].size(); ++j) {
                 if (t.getShape()[i][j]) {
@@ -160,6 +167,7 @@ public:
     }
 
     void merge(const Tetromino& t) {
+    // (This function is unchanged)
         for (size_t i = 0; i < t.getShape().size(); ++i) {
             for (size_t j = 0; j < t.getShape()[i].size(); ++j) {
                 if (t.getShape()[i][j]) {
@@ -185,7 +193,11 @@ public:
                 y++;
             }
         }
-        if (lines > 0) system("aplay -q pop.wav &");
+        if (lines > 0) {
+            // --- MODIFICATION: Use the absolute path ---
+            string cmd = "aplay -q " + g_exe_dir_path + "/pop.wav &";
+            system(cmd.c_str());
+        }
         return lines;
     }
 
@@ -193,6 +205,7 @@ public:
 };
 
 class Game {
+// (All private members are unchanged)
 private:
     Grid grid;
     Tetromino* current;
@@ -203,6 +216,7 @@ private:
     string playerName;
 
     void printInstructions() const {
+    // (This function is unchanged)
         cout << "\033[H\033[J"; // Clear screen
         cout << ANSI_COLOR_BOLD << ANSI_COLOR_GREEN << "Welcome to TETRIS!" << ANSI_COLOR_RESET << endl;
         cout << "--------------------" << endl;
@@ -217,18 +231,19 @@ private:
         cout << ANSI_COLOR_YELLOW << "  Q" << ANSI_COLOR_RESET << " - Quit" << endl << endl;
         cout << "Press " << ANSI_COLOR_GREEN << "Enter" << ANSI_COLOR_RESET << " to start...";
         
-        // Wait for Enter key
         char c;
         while(read(STDIN_FILENO, &c, 1) == 1 && c != '\n');
     }
 
     Tetromino* newPiece() {
+    // (This function is unchanged)
         TetrominoType types[] = {TetrominoType::I, TetrominoType::O, TetrominoType::T,
                                  TetrominoType::S, TetrominoType::Z, TetrominoType::J, TetrominoType::L};
         return new Tetromino(types[rand() % 7]);
     }
 
     void drawGhost(Tetromino* ghost, vector<vector<string>>& tempGrid) const {
+    // (This function is unchanged)
         while (!grid.isCollision(*ghost)) ghost->move(0, 1);
         ghost->move(0, -1);
         
@@ -246,7 +261,8 @@ private:
     }
 
     void draw() const {
-        cout << "\033[H"; // Cursor to home
+    // (This function is unchanged)
+        cout << "\033[H"; 
         cout << ANSI_COLOR_RESET;
         
         string scoreLine = "Player: " + playerName + " | Score: " + to_string(score) + " | Level: " + to_string(level);
@@ -305,8 +321,8 @@ private:
         }
     }
 
-    // --- MODIFICATION: Replaced getInput() with handleInput() ---
     void handleInput() {
+    // (This function is unchanged)
         if (!kbhit()) return;
 
         char ch = '\0';
@@ -339,8 +355,9 @@ private:
 
 public:
     Game() : score(0), level(1), gameOver(false), paused(false) {
+    // (This function is unchanged)
         srand(time(0));
-        cout << "\033[H\033[J"; // Clear screen
+        cout << "\033[H\033[J"; 
         cout << "Enter player name: ";
         getline(cin, playerName);
         printInstructions();
@@ -350,6 +367,7 @@ public:
     ~Game() { delete current; }
 
     void update() {
+    // (This function is unchanged)
         if (paused) return;
         Tetromino temp = *current;
         temp.move(0, 1);
@@ -368,32 +386,42 @@ public:
     }
 
     void run() {
-        // --- MODIFICATION: Set up signal handlers ---
         signal(SIGTSTP, handle_signal);
         signal(SIGCONT, handle_signal);
-
-        // --- MODIFICATION: Enable raw mode ---
+        
         enableRawMode();
 
         while (!gameOver) {
             draw();
             handleInput();
             update();
-            usleep(200000 / level); // Smoother gameplay
+            usleep(200000 / level);
         }
-
-        // --- MODIFICATION: Disable raw mode *before* showing Game Over ---
+        
         disableRawMode();
         
-        cout << "\033[H\033[J"; // Clear screen
+        cout << "\033[H\033[J"; 
         cout << ANSI_COLOR_BOLD << ANSI_COLOR_RED << "GAME OVER!" << ANSI_COLOR_RESET << endl;
         cout << "Final Score: " << ANSI_COLOR_GREEN << score << ANSI_COLOR_RESET << endl;
-        system("aplay -q pop2.wav &");
+        
+        // --- MODIFICATION: Use the absolute path ---
+        string cmd = "aplay -q " + g_exe_dir_path + "/pop2.wav &";
+        system(cmd.c_str());
     }
 };
 
 int main() {
+    // --- MODIFICATION: Get the executable's path ---
+    char exe_path[PATH_MAX];
+    ssize_t len = readlink("/proc/self/exe", exe_path, sizeof(exe_path) - 1);
+    if (len != -1) {
+        exe_path[len] = '\0';
+        g_exe_dir_path = dirname(exe_path); // Get the directory part
+    } else {
+        g_exe_dir_path = "."; // Fallback if readlink fails
+    }
+
     Game game;
     game.run();
-    return 0; // atexit(disableRawMode) will be called here
+    return 0;
 }

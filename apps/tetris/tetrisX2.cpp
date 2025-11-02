@@ -10,6 +10,8 @@
 #include <sstream>
 #include <signal.h>       // --- MODIFICATION: Added for signals
 #include <sys/select.h>   // --- MODIFICATION: Added for non-blocking read
+#include <libgen.h>         // --- MODIFICATION: For dirname()
+#include <linux/limits.h>   // --- MODIFICATION: For PATH_MAX
 
 using namespace std;
 
@@ -32,7 +34,10 @@ using namespace std;
 #define ANSI_COLOR_GHOST   "\x1b[37;2m"
 #define ANSI_COLOR_BOLD    "\x1b[1m"
 
-enum class TetrominoType { I, O, T, S, Z, J, L };
+
+// --- MODIFICATION: Global variable for our executable's directory ---
+string g_exe_dir_path;
+
 
 // --- MODIFICATION: Terminal control globals and functions ---
 struct termios orig_termios;
@@ -76,8 +81,9 @@ void handle_signal(int sig) {
 }
 // --- END OF MODIFIED TERMINAL CONTROL ---
 
-
 // Tetromino Class (unchanged)
+enum class TetrominoType { I, O, T, S, Z, J, L };
+
 class Tetromino {
 private:
     TetrominoType type;
@@ -133,7 +139,7 @@ public:
     void setPosition(int newX, int newY) { x = newX; y = newY; }
 };
 
-// Grid Class (unchanged)
+// Grid Class
 class Grid {
 private:
     vector<vector<string>> grid;
@@ -141,6 +147,7 @@ public:
     Grid() : grid(HEIGHT, vector<string>(WIDTH, "")) {}
 
     bool isCollision(const Tetromino& t) const {
+    // (This function is unchanged)
         for (size_t i = 0; i < t.getShape().size(); ++i) {
             for (size_t j = 0; j < t.getShape()[i].size(); ++j) {
                 if (t.getShape()[i][j]) {
@@ -157,6 +164,7 @@ public:
     }
 
     void merge(const Tetromino& t) {
+    // (This function is unchanged)
         for (size_t i = 0; i < t.getShape().size(); ++i) {
             for (size_t j = 0; j < t.getShape()[i].size(); ++j) {
                 if (t.getShape()[i][j]) {
@@ -179,31 +187,37 @@ public:
                 grid.erase(grid.begin() + y);
                 grid.insert(grid.begin(), vector<string>(WIDTH, ""));
                 lines++;
-                y++; // check same row index again
+                y++; 
             }
         }
-        if (lines > 0) system("aplay -q pop.wav &");
+        if (lines > 0) {
+            // --- MODIFICATION: Use the absolute path ---
+            string cmd = "aplay -q " + g_exe_dir_path + "/pop.wav &";
+            system(cmd.c_str());
+        }
         return lines;
     }
 
     const vector<vector<string>>& getGrid() const { return grid; }
 };
 
-// Player Class (unchanged from your original tetrisX2.cpp)
+// Player Class
 class Player {
 private:
     Grid grid;
     Tetromino* current;
     string colorForGhost = ANSI_COLOR_GHOST;
-    bool gameOverSoundPlayed = false;
+    bool gameOverSoundPlayed = false; 
 
     Tetromino* newPiece() {
+    // (This function is unchanged)
         TetrominoType types[] = {TetrominoType::I, TetrominoType::O, TetrominoType::T,
                                  TetrominoType::S, TetrominoType::Z, TetrominoType::J, TetrominoType::L};
         return new Tetromino(types[rand() % 7]);
     }
 
     void drawGhost(vector<vector<string>>& tempGrid) const {
+    // (This function is unchanged)
         Tetromino* ghost = current->clone();
         while (!grid.isCollision(*ghost))
             ghost->move(0, 1);
@@ -222,12 +236,13 @@ private:
     }
 
 public:
+// (Public members unchanged)
     string name;
     int score;
     int level;
     bool gameOver;
     bool paused;
-    int playerId; // 1 or 2
+    int playerId;
 
     Player(int id, const string& n) : name(n), score(0), level(1),
         gameOver(false), paused(false), playerId(id) { current = newPiece(); }
@@ -235,6 +250,7 @@ public:
     ~Player() { delete current; }
 
     void processCommand(const string& cmd) {
+    // (This function is unchanged)
         if (paused) {
             if (cmd == "pause")
                 paused = false;
@@ -283,16 +299,18 @@ public:
         }
 
         if (gameOver && !gameOverSoundPlayed) {
-            system("aplay -q pop2.wav &");
+            // --- MODIFICATION: Use the absolute path ---
+            string cmd = "aplay -q " + g_exe_dir_path + "/pop2.wav &";
+            system(cmd.c_str());
             gameOverSoundPlayed = true;
         }
     }
 
     vector<string> render() const {
+    // (This function is unchanged)
         vector<string> lines;
         stringstream ss;
         vector<vector<string>> tempGrid = grid.getGrid();
-        
         {
             Tetromino* ghost = current->clone();
             while (!grid.isCollision(*ghost))
@@ -370,13 +388,11 @@ string getInput() {
     char buf[16];
     int bytesRead;
 
-    // Check if there's data to read
     struct timeval tv = { 0L, 0L };
     fd_set fds;
     FD_ZERO(&fds);
     FD_SET(STDIN_FILENO, &fds);
     if (select(STDIN_FILENO + 1, &fds, NULL, NULL, &tv) > 0) {
-        // Data is available, read it
         bytesRead = read(STDIN_FILENO, buf, sizeof(buf));
         if (bytesRead > 0) {
             input.append(buf, bytesRead);
@@ -398,10 +414,10 @@ public:
     }
 
     void handleInput(const string& input) {
+    // (This function is unchanged)
         size_t i = 0;
         while (i < input.size()) {
             char ch = input[i];
-            // Check for escape sequence (arrow keys for Player2)
             if (ch == '\033' && i + 2 < input.size() && input[i+1]=='[') {
                 char arrow = input[i+2];
                 if (arrow == 'D') player2.processCommand("L");
@@ -450,6 +466,7 @@ public:
     }
 
     void update() {
+    // (This function is unchanged)
         if (!player1.paused && !player1.gameOver) player1.update();
         if (!player2.paused && !player2.gameOver) player2.update();
     }
@@ -477,18 +494,32 @@ public:
         // --- MODIFICATION: Disable raw mode *before* showing score ---
         disableRawMode();
 
-        cout << "\033[H\033[J"; // Use ANSI code instead of system("clear")
+        cout << "\033[H\033[J"; 
         cout << ANSI_COLOR_BOLD << ANSI_COLOR_RED << "GAME OVER!" << ANSI_COLOR_RESET << "\n";
         cout << player1.name << " Score: " << ANSI_COLOR_GREEN << player1.score << ANSI_COLOR_RESET << "\n";
         cout << player2.name << " Score: " << ANSI_COLOR_GREEN << player2.score << ANSI_COLOR_RESET << "\n";
-        system("aplay -q pop2.wav &");
+        
+        // --- MODIFICATION: Use the absolute path ---
+        // (This only plays one sound, but it's safe)
+        string cmd = "aplay -q " + g_exe_dir_path + "/pop2.wav &";
+        system(cmd.c_str());
     }
 };
 
 int main() {
+    // --- MODIFICATION: Get the executable's path ---
+    char exe_path[PATH_MAX];
+    ssize_t len = readlink("/proc/self/exe", exe_path, sizeof(exe_path) - 1);
+    if (len != -1) {
+        exe_path[len] = '\0';
+        g_exe_dir_path = dirname(exe_path); // Get the directory part
+    } else {
+        g_exe_dir_path = "."; // Fallback if readlink fails
+    }
+
     // --- MODIFICATION: Do all setup in normal mode *first* ---
     string name1, name2;
-    cout << "\033[H\033[J"; // Clear screen
+    cout << "\033[H\033[J"; 
     cout << ANSI_COLOR_BOLD << ANSI_COLOR_GREEN << "Welcome to TETRIS x2!" << ANSI_COLOR_RESET << endl;
     cout << "-----------------------" << endl;
     cout << "Enter Player 1 name (WASD & Spacebar): ";
@@ -507,12 +538,11 @@ int main() {
               << ANSI_COLOR_YELLOW << "Q/ESC" << ANSI_COLOR_RESET << " - Quit\n\n"
               << "Press " << ANSI_COLOR_GREEN << "Enter" << ANSI_COLOR_RESET << " to start...";
     
-    // Wait for Enter
     char c;
     while(read(STDIN_FILENO, &c, 1) == 1 && c != '\n');
 
     MultiplayerGame game(name1, name2);
-    game.run(); // This will enable raw mode, run the game, and disable it
+    game.run(); 
     
-    return 0; // atexit(disableRawMode) will be called here
+    return 0; 
 }
