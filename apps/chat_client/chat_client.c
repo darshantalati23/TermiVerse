@@ -12,24 +12,30 @@
 #define MAX_MSG_LEN 1024
 #define SERVER_FIFO "/tmp/termiverse_server_fifo"
 
-// Client Data Structure (must match the server's)
+// --- MODIFIED Client Data Structure ---
+// Must match the server's new struct
 typedef struct {
     int id;
     char username[64];
-    char client_fifo[128];
-    int client_fd;
+    char read_fifo[128];  // Server -> Client
+    char write_fifo[128]; // Client -> Server
+    int read_fd;
+    int write_fd;
     int active;
 } client_t;
 
-// Global variable for our private FIFO path
-char g_private_fifo[128];
+// --- MODIFICATION: Global variables for *both* private FIFOs ---
+char g_read_fifo[128];
+char g_write_fifo[128];
+int g_read_fd;
+int g_write_fd;
 
 // Function Prototypes
 void *sender_thread(void *arg);
-void cleanup_private_fifo(int sig);
+void cleanup_private_fifos(int sig);
 
 int main(int argc, char *argv[]) {
-    int server_fd, private_fd;
+    int server_fd;
     client_t login_request;
     char buffer[MAX_MSG_LEN];
 
@@ -40,117 +46,125 @@ int main(int argc, char *argv[]) {
     strncpy(login_request.username, argv[1], sizeof(login_request.username) - 1);
     login_request.username[sizeof(login_request.username) - 1] = '\0';
 
-    // --- 1. Create our private FIFO ---
-    // The path is unique using the process ID (PID)
-    snprintf(g_private_fifo, sizeof(g_private_fifo), "/tmp/client_fifo_%d", getpid());
+    // --- 1. Create our TWO private FIFOs ---
+    int pid = getpid();
+    snprintf(g_read_fifo, sizeof(g_read_fifo), "/tmp/client_%d_R", pid);
+    snprintf(g_write_fifo, sizeof(g_write_fifo), "/tmp/client_%d_W", pid);
     
-    // Set up a signal handler to clean up our FIFO on exit
-    signal(SIGINT, cleanup_private_fifo);
-    signal(SIGTERM, cleanup_private_fifo);
+    // Copy paths into the login request
+    strcpy(login_request.read_fifo, g_read_fifo);
+    strcpy(login_request.write_fifo, g_write_fifo);
+
+    signal(SIGINT, cleanup_private_fifos);
+    signal(SIGTERM, cleanup_private_fifos);
 
     umask(0);
-    if (mkfifo(g_private_fifo, 0666) == -1) {
+    // Create both FIFOs
+    if (mkfifo(g_read_fifo, 0666) == -1 || mkfifo(g_write_fifo, 0666) == -1) {
         if (errno != EEXIST) {
             perror("mkfifo(private)");
+            cleanup_private_fifos(0);
             return 1;
         }
     }
-    strcpy(login_request.client_fifo, g_private_fifo);
 
     // --- 2. Send Login Request to Server ---
-    // Open the well-known server FIFO for writing
     server_fd = open(SERVER_FIFO, O_WRONLY);
     if (server_fd == -1) {
         perror("open(server_fd)");
         fprintf(stderr, "Is the chat server running?\n");
-        cleanup_private_fifo(0);
+        cleanup_private_fifos(0);
         return 1;
     }
 
-    // Write our login struct to the server
     if (write(server_fd, &login_request, sizeof(client_t)) != sizeof(client_t)) {
         fprintf(stderr, "Error: Failed to send login request to server.\n");
         close(server_fd);
-        cleanup_private_fifo(0);
+        cleanup_private_fifos(0);
         return 1;
     }
-    close(server_fd); // We are done with the public FIFO
+    close(server_fd);
 
-    // --- 3. Open our private FIFO for reading messages from the server ---
-    // This call will BLOCK until the server opens it for writing.
-    printf("Connecting to chat... (PID: %d)\n", getpid());
-    private_fd = open(g_private_fifo, O_RDONLY);
-    if (private_fd == -1) {
-        perror("open(private_fd)");
-        cleanup_private_fifo(0);
+    // --- 3. Open our private FIFOs ---
+    printf("Connecting to chat... (PID: %d)\n", pid);
+
+    // Open READ-FIFO (Server -> Client) for READING
+    g_read_fd = open(g_read_fifo, O_RDONLY);
+    if (g_read_fd == -1) {
+        perror("open(g_read_fd)");
+        cleanup_private_fifos(0);
         return 1;
     }
-    printf("Connected! Type '/quit' to exit.\n");
+
+    // Open WRITE-FIFO (Client -> Server) for WRITING
+    g_write_fd = open(g_write_fifo, O_WRONLY);
+    if (g_write_fd == -1) {
+        perror("open(g_write_fd)");
+        close(g_read_fd);
+        cleanup_private_fifos(0);
+        return 1;
+    }
+
+    printf("Connected! Type '/quit' to exit. Type '/list' for users.\n");
 
     // --- 4. Create a separate thread for sending messages ---
     pthread_t tid;
     if (pthread_create(&tid, NULL, sender_thread, NULL) != 0) {
         fprintf(stderr, "Error: Failed to create sender thread.\n");
-        close(private_fd);
-        cleanup_private_fifo(0);
+        close(g_read_fd);
+        close(g_write_fd);
+        cleanup_private_fifos(0);
         return 1;
     }
     pthread_detach(tid);
 
     // --- 5. Main thread loop: Receive and print messages ---
     ssize_t bytes_read;
-    while ((bytes_read = read(private_fd, buffer, MAX_MSG_LEN - 1)) > 0) {
+    // Read from the Server -> Client pipe
+    while ((bytes_read = read(g_read_fd, buffer, MAX_MSG_LEN - 1)) > 0) {
         buffer[bytes_read] = '\0';
         printf("%s\n", buffer);
     }
 
     printf("Disconnected from server.\n");
-    close(private_fd);
-    cleanup_private_fifo(0); // Clean up and exit
+    close(g_read_fd);
+    close(g_write_fd); // Close write FD in case sender thread is stuck
+    cleanup_private_fifos(0);
 
     return 0;
 }
 
 // --- sender_thread: Reads user input and sends it to the server ---
 void *sender_thread(void *arg) {
-    int private_fd_write;
     char buffer[MAX_MSG_LEN];
 
-    // Open our own private FIFO for writing. This is how we send messages.
-    // The server has already opened this for reading.
-    private_fd_write = open(g_private_fifo, O_WRONLY);
-    if (private_fd_write == -1) {
-        perror("sender_thread: open");
-        return NULL;
-    }
-
+    // We already opened g_write_fd in main, so we just use it.
     while (1) {
         if (fgets(buffer, MAX_MSG_LEN, stdin) != NULL) {
-            // Remove trailing newline
-            buffer[strcspn(buffer, "\n")] = 0;
+            buffer[strcspn(buffer, "\n")] = 0; // Remove trailing newline
 
             if (strcmp(buffer, "/quit") == 0) {
-                // Exit signal for the main thread
-                // Sending SIGINT to ourselves will trigger the cleanup handler
-                kill(getpid(), SIGINT);
+                kill(getpid(), SIGINT); // Trigger cleanup
                 break;
             }
 
-            // Write the message to our FIFO, which the server reads
-            if (write(private_fd_write, buffer, strlen(buffer)) == -1) {
+            // Write the message to our WRITE-FIFO (Client -> Server)
+            if (write(g_write_fd, buffer, strlen(buffer)) == -1) {
                 perror("sender_thread: write");
                 break;
             }
         }
     }
-    close(private_fd_write);
+    // No need to close g_write_fd here, main will handle it
     return NULL;
 }
 
-// --- cleanup_private_fifo: Signal handler to remove our FIFO on exit ---
-void cleanup_private_fifo(int sig) {
-    unlink(g_private_fifo);
-    if (sig != 0) { // If called by a real signal, exit
+// --- cleanup_private_fifos: Signal handler to remove our FIFOs on exit ---
+void cleanup_private_fifos(int sig) {
+    // Delete both private FIFOs
+    unlink(g_read_fifo);
+    unlink(g_write_fifo);
+    if (sig != 0) { 
         exit(0);
     }
 }
