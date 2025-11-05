@@ -15,7 +15,6 @@
 #define MAX_JOBS 32
 #define APP_DIR "bin/"
 
-// --- MODIFICATION: Use home directory for the alarm file ---
 static char g_alarm_file_path[1024];
 
 // --- Job States ---
@@ -65,15 +64,12 @@ void list_jobs();
 int main() {
     char cmdline[MAX_LINE];
 
-    // --- MODIFICATION: Set the global alarm file path ---
     const char *home_dir = getenv("HOME");
     if (home_dir == NULL) {
         fprintf(stderr, "Error: Could not find HOME directory. Alarm app will fail.\n");
-        // Don't exit, but alarms won't work
     } else {
         snprintf(g_alarm_file_path, sizeof(g_alarm_file_path), "%s/termiverse_alarm.txt", home_dir);
     }
-    // --- End modification ---
 
     shell_terminal_fd = STDIN_FILENO;
     if (!isatty(shell_terminal_fd)) {
@@ -88,10 +84,14 @@ int main() {
     signal(SIGTTIN, SIG_IGN);
     signal(SIGTTOU, SIG_IGN);
 
+    // --- Signal Handler Setup (MODIFIED) ---
     struct sigaction sa;
     sigemptyset(&sa.sa_mask);
-    sa.sa_flags = SA_RESTART; 
+    
+    // --- SIGCHLD & SIGTSTP handlers (RESTARTABLE) ---
+    sa.sa_flags = SA_RESTART; // Restart syscalls for these
 
+    // SIGCHLD
     sa.sa_handler = sigchld_handler;
     sa.sa_flags |= SA_NOCLDSTOP;
     if (sigaction(SIGCHLD, &sa, NULL) < 0) {
@@ -99,17 +99,24 @@ int main() {
         exit(1);
     }
     
+    // SIGTSTP
     sa.sa_handler = sigtstp_handler;
+    sa.sa_flags = SA_RESTART; // Reset flags to just SA_RESTART
     if (sigaction(SIGTSTP, &sa, NULL) < 0) {
         perror("sigaction (SIGTSTP)");
         exit(1);
     }
 
+    // --- SIGUSR1 handler (NON-RESTARTABLE) ---
+    // We *want* this signal to interrupt fgets()
+    sa.sa_flags = 0; // NO SA_RESTART
     sa.sa_handler = sigusr1_handler;
     if (sigaction(SIGUSR1, &sa, NULL) < 0) {
         perror("sigaction (SIGUSR1)");
         exit(1);
     }
+    // --- End of modification ---
+
 
     shell_pgid = getpid();
     if (setpgid(shell_pgid, shell_pgid) < 0) {
@@ -130,8 +137,9 @@ int main() {
 
         if (fgets(cmdline, MAX_LINE, stdin) == NULL) {
             if (errno == EINTR) {
+                // Interrupted by our alarm signal, clear error and loop
                 clearerr(stdin);
-                continue;
+                continue; // This will now loop up and check g_alarm_flag
             }
             printf("\nExiting TermiVerse.\n");
             break;
@@ -319,7 +327,7 @@ void run_builtin_command(char **argv) {
     }
 }
 
-// --- launch_job: (Unchanged, but I've added the SIGUSR1 reset) ---
+// --- launch_job: (Unchanged) ---
 void launch_job(char **argv, int is_background, char *cmdline) {
     pid_t pid;
     sigset_t mask, prev_mask;
@@ -338,7 +346,7 @@ void launch_job(char **argv, int is_background, char *cmdline) {
         signal(SIGTTIN, SIG_DFL);
         signal(SIGTTOU, SIG_DFL);
         signal(SIGCHLD, SIG_DFL);
-        signal(SIGUSR1, SIG_DFL); // Reset SIGUSR1 for child
+        signal(SIGUSR1, SIG_DFL);
 
         sigprocmask(SIG_SETMASK, &prev_mask, NULL);
 
@@ -387,10 +395,8 @@ void handle_alarm() {
     char buffer[MAX_LINE + 100];
     ssize_t bytes_read;
 
-    // --- MODIFICATION: Read from the home directory ---
     fd = open(g_alarm_file_path, O_RDONLY);
     if (fd == -1) {
-        // This can happen if the alarm app failed to write the file
         write(STDOUT_FILENO, "\n\n--- ALARM ---\n", 16);
         write(STDOUT_FILENO, "(Error: Could not read alarm message.)", 38);
         write(STDOUT_FILENO, "\n---------------\nTermiVerse> ", 30);
@@ -399,7 +405,7 @@ void handle_alarm() {
     
     bytes_read = read(fd, buffer, sizeof(buffer) - 1);
     close(fd);
-    unlink(g_alarm_file_path); // Delete the temp file
+    unlink(g_alarm_file_path); 
 
     if (bytes_read > 0) {
         buffer[bytes_read] = '\0';
@@ -407,7 +413,6 @@ void handle_alarm() {
         write(STDOUT_FILENO, buffer, strlen(buffer));
         write(STDOUT_FILENO, "\n---------------\nTermiVerse> ", 30);
     } else {
-        // This handles the `launch alarm 5 ""` case
         write(STDOUT_FILENO, "\n\n--- ALARM ---\n", 16);
         write(STDOUT_FILENO, "(Alarm with no message)", 23);
         write(STDOUT_FILENO, "\n---------------\nTermiVerse> ", 30);
