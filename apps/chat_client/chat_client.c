@@ -115,7 +115,7 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    printf(COLOR_SERVER "Connected! Type '/quit' to exit. Type '/list' for users.\n" COLOR_RESET);
+    printf(COLOR_SERVER "Connected! Commands: /list  /dm <user> <msg>  /history  /quit\n" COLOR_RESET);
     printf("> "); // NEW: Print initial prompt
     fflush(stdout);
 

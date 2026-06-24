@@ -8,10 +8,12 @@
 #include <sys/types.h>
 #include <errno.h>
 #include <signal.h>
+#include <time.h>
 
 #define MAX_CLIENTS 32
 #define MAX_MSG_LEN 1024
-#define SERVER_FIFO "/tmp/termiverse_server_fifo" 
+#define SERVER_FIFO "/tmp/termiverse_server_fifo"
+#define CHAT_LOG_FILE "/tmp/termiverse_chat.log"
 
 // --- MODIFIED Client Data Structure ---
 // Now holds paths for TWO private FIFOs
@@ -38,6 +40,7 @@ void send_user_list(int client_id);
 void add_client(client_t *client);
 void remove_client(int client_id);
 void cleanup_fifos(int sig);
+void log_message(const char *msg);
 
 // --- main ---
 int main() {
@@ -155,7 +158,11 @@ void *handle_client(void *arg) {
             char target_username[64];
             char dm_text[MAX_MSG_LEN];
             if (sscanf(buffer + 4, "%63s %[^\n]", target_username, dm_text) >= 2) {
-                snprintf(message_out, sizeof(message_out), "[%s (DM)] %s", client->username, dm_text);
+                char ts[8];
+                time_t now = time(NULL);
+                struct tm *tm_info = localtime(&now);
+                strftime(ts, sizeof(ts), "[%H:%M]", tm_info);
+                snprintf(message_out, sizeof(message_out), "%s [%s (DM)] %s", ts, client->username, dm_text);
                 if (!send_direct_message(message_out, client->id, target_username)) {
                     snprintf(message_out, sizeof(message_out), "[SERVER] Error: User '%s' not found.", target_username);
                     write(client->read_fd, message_out, strlen(message_out)); // Write to Server->Client pipe
@@ -166,9 +173,41 @@ void *handle_client(void *arg) {
             }
         } else if (strcmp(buffer, "/list") == 0) {
             send_user_list(client->id);
+        } else if (strcmp(buffer, "/history") == 0) {
+            int log_fd = open(CHAT_LOG_FILE, O_RDONLY);
+            if (log_fd == -1) {
+                const char *no_hist = "[SERVER] No message history yet.";
+                write(client->read_fd, no_hist, strlen(no_hist));
+            } else {
+                char hist_buf[32768];
+                ssize_t n = read(log_fd, hist_buf, sizeof(hist_buf) - 1);
+                close(log_fd);
+                if (n <= 0) {
+                    const char *no_hist = "[SERVER] No message history yet.";
+                    write(client->read_fd, no_hist, strlen(no_hist));
+                } else {
+                    hist_buf[n] = '\0';
+                    int newline_count = 0;
+                    int offset = (int)n - 1;
+                    while (offset >= 0) {
+                        if (hist_buf[offset] == '\n') {
+                            newline_count++;
+                            if (newline_count == 20) break;
+                        }
+                        offset--;
+                    }
+                    if (offset < 0) offset = 0;
+                    else offset++;
+                    write(client->read_fd, hist_buf + offset, n - offset);
+                }
+            }
         } else {
             // Broadcast Message
-            snprintf(message_out, sizeof(message_out), "[%s] %s", client->username, buffer);
+            char ts[8];
+            time_t now = time(NULL);
+            struct tm *tm_info = localtime(&now);
+            strftime(ts, sizeof(ts), "[%H:%M]", tm_info);
+            snprintf(message_out, sizeof(message_out), "%s [%s] %s", ts, client->username, buffer);
             broadcast_message(message_out, client->id);
         }
     }
@@ -190,8 +229,18 @@ void *handle_client(void *arg) {
     return NULL;
 }
 
+// --- log_message: Append a message to the persistent chat log ---
+void log_message(const char *msg) {
+    int fd = open(CHAT_LOG_FILE, O_WRONLY | O_CREAT | O_APPEND, 0644);
+    if (fd == -1) return;
+    write(fd, msg, strlen(msg));
+    write(fd, "\n", 1);
+    close(fd);
+}
+
 // --- broadcast_message: Send a message to all active clients ---
 void broadcast_message(const char *message, int sender_id) {
+    log_message(message);
     pthread_mutex_lock(&g_clients_mutex);
     for (int i = 0; i < MAX_CLIENTS; i++) {
         // Send to active clients, and don't send to sender (unless sender_id is -1)

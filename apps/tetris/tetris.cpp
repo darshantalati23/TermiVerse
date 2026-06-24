@@ -9,7 +9,7 @@
 #include <signal.h>
 #include <sys/select.h>
 #include <libgen.h>         // --- MODIFICATION: For dirname()
-#include <linux/limits.h>   // --- MODIFICATION: For PATH_MAX
+#include <limits.h>
 
 using namespace std;
 
