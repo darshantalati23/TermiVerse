@@ -1,7 +1,7 @@
 # Master Makefile for TermiVerse
 
 # List of all directories that need building
-SUBDIRS = launcher apps/snake apps/tetris apps/notes apps/chat_server apps/chat_client apps/calculator apps/alarm
+SUBDIRS = launcher apps/snake apps/tetris apps/notes apps/chat_server apps/chat_client apps/calculator apps/alarm apps/turtlesim
 
 # Phony targets (not actual files)
 .PHONY: all clean $(SUBDIRS)

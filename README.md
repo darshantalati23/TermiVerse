@@ -64,6 +64,8 @@ above. WSL2 provides a full Linux kernel, so no code changes are necessary.
 | `chat <name>` | Join the global chat room |
 | `calc <num> <op> <num>` | Calculator (e.g. `calc 10 + 5`) |
 | `launch alarm <sec> <msg>` | Set a countdown timer (e.g. `launch alarm 5 "Run"`) |
+| `launch turtlesim live` | Play the live trading simulation game against a Bot |
+| `launch turtlesim backtest <Asset>` | Run the backtester on data (e.g., `launch turtlesim backtest GOLD`) |
 | `launch notes <cmd>` | Notes app — subcommands: `add "text"`, `read`, `clear` |
 | `launch snake` | Snake game |
 | `launch tetris` | Tetris game |

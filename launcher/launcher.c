@@ -200,7 +200,8 @@ void print_help() {
     printf("  " COLOR_CYAN "%-40s" COLOR_RESET " : %s\n", "launch alarm <sec> <msg>", "Set Timer (e.g. alarm 5 \"Run\")");
     printf("  " COLOR_CYAN "%-40s" COLOR_RESET " : %s\n", "launch notes <cmd>", "Notes App (add/read/clear)");
     printf("  " COLOR_CYAN "%-40s" COLOR_RESET " : %s\n", "launch <app>", "Manual Launch (snake, tetris)");
-    
+    printf("  " COLOR_CYAN "%-40s" COLOR_RESET " : %s\n", "launch turtlesim <mode>", "Trading Simulator (live or backtest)");
+        
     printf("\n" COLOR_BOLD "  === System Commands ===" COLOR_RESET "\n");
     printf("  " COLOR_MAGENTA "%-18s" COLOR_RESET " : %s\n", "jobs", "List background jobs");
     printf("  " COLOR_MAGENTA "%-18s" COLOR_RESET " : %s\n", "fg %<id>", "Resume job in foreground");
@@ -272,6 +273,20 @@ void eval(char *cmdline) {
         snprintf(calc_cmdline, sizeof(calc_cmdline), "launch calculator %s %s %s", argv[1], argv[2], argv[3]);
         launch_job(calc_argv, 0, calc_cmdline);
     }
+    // else if (strcmp(argv[0], "turtlesim") == 0) {
+    //     char *sim_argv[MAX_ARGS];
+    //     sim_argv[0] = "turtlesim";
+    //     int i = 1;
+    //     while (argv[i] != NULL) {
+    //         sim_argv[i] = argv[i];
+    //         i++;
+    //     }
+    //     sim_argv[i] = NULL;
+    //     char sim_cmdline[MAX_LINE];
+    //     snprintf(sim_cmdline, sizeof(sim_cmdline), "launch turtlesim");
+    //     launch_job(sim_argv, 0, sim_cmdline);
+    // }
+    // ------------------------------------
     else {
         printf(COLOR_RED "  Command not found: '%s'\n" COLOR_RESET, argv[0]);
         printf("  Type " COLOR_BOLD "'help'" COLOR_RESET " to see available applications.\n");
