@@ -466,12 +466,6 @@ void sigchld_handler(int sig) {
         struct Job *job = get_job_by_pid(pid);
         if (job) {
             if (WIFEXITED(status) || WIFSIGNALED(status)) {
-                if (job->status == BACKGROUND) {
-                    // We can't use printf easily in a handler, but since we aren't interrupting
-                    // a critical section (checked by errno/EINTR loop in main), this simple visual feedback is okay.
-                    // Ideally, we would set a flag like g_alarm_flag.
-                    // For now, we silence the "Done" message to keep UI clean or print carefully.
-                }
                 delete_job(pid);
             } else if (WIFSTOPPED(status)) {
                 job->status = STOPPED;

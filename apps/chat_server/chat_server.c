@@ -80,8 +80,6 @@ int main() {
                 continue;
             }
             memcpy(new_client, &new_client_request, sizeof(client_t));
-
-            // --- MODIFICATION: Open BOTH client FIFOs ---
             
             // 1. Open the Client's READ-FIFO (Server -> Client) for WRITING
             new_client->read_fd = open(new_client->read_fifo, O_WRONLY);

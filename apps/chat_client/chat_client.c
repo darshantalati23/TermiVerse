@@ -135,7 +135,6 @@ int main(int argc, char *argv[]) {
     while ((bytes_read = read(g_read_fd, buffer, MAX_MSG_LEN - 1)) > 0) {
         buffer[bytes_read] = '\0';
         
-        // --- MODIFICATION: Use the color parser ---
         printf("\r"); // Move cursor to start of line
         print_colored_message(buffer);
         printf("> "); // Reprint prompt
@@ -150,7 +149,6 @@ int main(int argc, char *argv[]) {
     return 0;
 }
 
-// --- NEW: Function to parse and print colored messages ---
 void print_colored_message(const char *buffer) {
     // Check for Server messages
     if (strncmp(buffer, "[SERVER]", 8) == 0) {
