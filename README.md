@@ -1,6 +1,12 @@
 # TermiVerse
 
-A custom multi-process terminal platform built in C/C++
+## Chat Demo
+
+![TermiVerse Multi-pane Chat Demo](./chat_demo.cast)
+
+## System Demo (except chat)
+
+![TermiVerse Single-Pane Demo](./chat_demo2.cast)
 
 ## Architecture
 
