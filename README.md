@@ -2,11 +2,11 @@
 
 ## Chat Demo
 
-![TermiVerse Multi-pane Chat Demo](./chat_demo.cast)
+![TermiVerse Multi-pane Chat Demo](assets/chat_demo.gif)
 
 ## System Demo (except chat)
 
-![TermiVerse Single-Pane Demo](./chat_demo2.cast)
+![TermiVerse Single-Pane Demo](assets/termiverse_demo.gif)
 
 ## Architecture
 
