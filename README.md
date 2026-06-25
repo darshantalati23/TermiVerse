@@ -52,7 +52,7 @@ Project primarily developed during the Computer Systems Programming Course, apar
 ## Build & Run
 
 ```sh
-make
+make clean && make
 ./bin/launcher
 ```
 
