@@ -27,14 +27,12 @@ job control via POSIX signals. Each application is a standalone binary.
 
 ## About the creators
 
-This project was made by the collectively by the students of Dhirubhai Ambani University (formerly DA-IICT):
+This project was made collectively by the students of Dhirubhai Ambani University (formerly DA-IICT):
 
-1. Darshan Talati (Student ID: 202401046)
-2. Dharmesh Upadhyay (Student ID: 202401049)
-3. Aarohi Mehta (Student ID: 202401002)
-4. Alvita Thakor (Student ID: 202401012)
-
-Project primarily developed during the Computer Systems Programming Course, apart from a few bug fixes and minor improvements in the overall experience and logic of the _TermiVerse_ project.
+1. Darshan Talati (Student ID: _202401046_)
+2. Dharmesh Upadhyay (Student ID: _202401049_)
+3. Aarohi Mehta (Student ID: _202401002_)
+4. Alvita Thakor (Student ID: _202401012_)
 
 ## Tech Stack
 
