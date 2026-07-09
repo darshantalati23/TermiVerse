@@ -4,6 +4,10 @@
 
 ![TermiVerse Single-Pane Demo](assets/termiverse_demo.gif)
 
+## Chat Demo
+
+![TermiVerse Chat Demo](assets/chat_demo.gif)
+
 ## Architecture
 
 TermiVerse is a shell-like environment where a central **Launcher** manages multiple
