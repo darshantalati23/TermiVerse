@@ -1,5 +1,15 @@
 # TermiVerse
 
+## Table of Contents
+1. [System Demo](#system-demo-except-chat)
+2. [Chat Demo](#chat-demo)
+3. [Architecture](#architecture)
+4. [About the Creators](#about-the-creators)
+5. [Tech Stack](#tech-stack)
+6. [Build & Run](#build--run)
+7. [Features & Commands](#features--commands)
+8. [Performance & Benchmarking](#performance--benchmarking)
+
 ## System Demo (except chat)
 
 ![TermiVerse Single-Pane Demo](assets/termiverse_demo.gif)
