@@ -10,7 +10,8 @@
 
 #define WINDOW_SIZE 20
 #define MAX_TICKS 100
-#define CHART_WIDTH 50
+#define CHART_WIDTH 60
+#define CHART_HEIGHT 15
 #define MAX_DATA_POINTS 500
 
 // UI Colors
@@ -58,30 +59,109 @@ double randn(double mu, double sigma) {
     return z0 * sigma + mu;
 }
 
-// Chart rendering
-void draw_chart(double price, double lower, double upper, double min_bound, double max_bound, char human_marker) {
-    char line[CHART_WIDTH + 1];
-    memset(line, '-', CHART_WIDTH);
-    line[CHART_WIDTH] = '\0';
+// Instructions Screen
+void show_instructions(int mode, const char* asset) {
+    printf("\033[H\033[J"); // Clear screen
+    printf(C_CYAN "=================================================\n");
+    printf("        TurtleSim : Trading Simulator Game       \n");
+    printf("=================================================\n" C_RESET);
+    printf("\n" C_YELLOW "  [ RULES & OBJECTIVE ]" C_RESET "\n");
+    printf("  Your goal is to beat the Donchian Channel Bot.\n");
+    printf("  The Bot follows a simple trend-following strategy:\n");
+    printf("  - Buys when price breaks the 20-period HIGH\n");
+    printf("  - Sells when price breaks the 20-period LOW\n");
     
-    double range = max_bound - min_bound;
-    if (range == 0) range = 1.0;
+    printf("\n" C_YELLOW "  [ CONTROLS ]" C_RESET "\n");
+    printf("  " C_GREEN "[B]" C_RESET " Buy / Long\n");
+    printf("  " C_RED "[S]" C_RESET " Sell / Short\n");
+    printf("  " C_YELLOW "[C]" C_RESET " Close Position\n");
+    
+    printf("\n" C_YELLOW "  [ DATASET INFO ]" C_RESET "\n");
+    if (mode == 0) { // Live
+        printf("  Source : " C_GREEN "Synthetic Brownian Motion" C_RESET "\n");
+        printf("  Ticks  : %d simulated periods\n", MAX_TICKS);
+    } else { // Backtest
+        printf("  Asset  : " C_GREEN "%s" C_RESET "\n", asset);
+        printf("  Source : " C_GREEN "Yahoo Finance (Real-world Data)" C_RESET "\n");
+        printf("  Range  : " C_GREEN "Feb 12, 2026 to Jul 9, 2026" C_RESET "\n");
+        printf("  Ticks  : ~100 daily closing prices\n");
+    }
+    
+    printf("\n\n  Press " C_CYAN "[ENTER]" C_RESET " to begin the simulation...");
+    fflush(stdout);
+    
+    char c;
+    while(read(STDIN_FILENO, &c, 1) > 0) {
+        if (c == '\n' || c == '\r') break;
+    }
+}
 
-    int l_idx = (int)((lower - min_bound) / range * (CHART_WIDTH - 1));
-    int u_idx = (int)((upper - min_bound) / range * (CHART_WIDTH - 1));
-    int p_idx = (int)((price - min_bound) / range * (CHART_WIDTH - 1));
+// 2D Chart rendering
+void draw_chart_2d(double *history, double *upper_hist, double *lower_hist, char *human_actions, int current_t) {
+    char grid[CHART_HEIGHT][CHART_WIDTH];
+    char color_grid[CHART_HEIGHT][CHART_WIDTH];
     
-    if (l_idx < 0) l_idx = 0; if (l_idx >= CHART_WIDTH) l_idx = CHART_WIDTH - 1;
-    if (u_idx < 0) u_idx = 0; if (u_idx >= CHART_WIDTH) u_idx = CHART_WIDTH - 1;
-    if (p_idx < 0) p_idx = 0; if (p_idx >= CHART_WIDTH) p_idx = CHART_WIDTH - 1;
+    for(int r=0; r<CHART_HEIGHT; r++) {
+        for(int c=0; c<CHART_WIDTH; c++) {
+            grid[r][c] = ' ';
+            color_grid[r][c] = 0; // 0=none, 1=cyan, 2=yellow, 3=green, 4=red
+        }
+    }
     
-    line[l_idx] = '[';
-    line[u_idx] = ']';
+    int start_t = current_t - CHART_WIDTH + 1;
+    if (start_t < 0) start_t = 0;
     
-    if (human_marker != ' ') line[p_idx] = human_marker;
-    else line[p_idx] = '*';
-
-    printf("%s | P: %7.2f | DC:[%6.2f, %6.2f]\n", line, price, lower, upper);
+    double min_val = 9999999.0, max_val = -9999999.0;
+    for(int t = start_t; t <= current_t; t++) {
+        if(history[t] > max_val) max_val = history[t];
+        if(history[t] < min_val) min_val = history[t];
+        if(upper_hist[t] > max_val) max_val = upper_hist[t];
+        if(lower_hist[t] < min_val) min_val = lower_hist[t];
+    }
+    
+    if(max_val == min_val) { max_val += 1.0; min_val -= 1.0; }
+    double range = max_val - min_val;
+    
+    for(int c=0; c < CHART_WIDTH; c++) {
+        int t = start_t + c;
+        if(t > current_t) break;
+        
+        int r_u = (int)((upper_hist[t] - min_val) / range * (CHART_HEIGHT - 1));
+        int r_l = (int)((lower_hist[t] - min_val) / range * (CHART_HEIGHT - 1));
+        int r_p = (int)((history[t] - min_val) / range * (CHART_HEIGHT - 1));
+        
+        if(r_u < 0) r_u = 0; if(r_u >= CHART_HEIGHT) r_u = CHART_HEIGHT-1;
+        if(r_l < 0) r_l = 0; if(r_l >= CHART_HEIGHT) r_l = CHART_HEIGHT-1;
+        if(r_p < 0) r_p = 0; if(r_p >= CHART_HEIGHT) r_p = CHART_HEIGHT-1;
+        
+        grid[r_u][c] = '-'; color_grid[r_u][c] = 1; 
+        grid[r_l][c] = '-'; color_grid[r_l][c] = 1; 
+        
+        grid[r_p][c] = '*'; color_grid[r_p][c] = 2; 
+        
+        if(human_actions[t] == 'B') { grid[r_p][c] = '^'; color_grid[r_p][c] = 3; }
+        if(human_actions[t] == 'S') { grid[r_p][c] = 'v'; color_grid[r_p][c] = 4; }
+        if(human_actions[t] == 'C') { grid[r_p][c] = 'o'; color_grid[r_p][c] = 2; }
+    }
+    
+    printf("\n");
+    for(int r = CHART_HEIGHT - 1; r >= 0; r--) {
+        double row_price = min_val + (r * range / (CHART_HEIGHT - 1));
+        printf(" %7.2f | ", row_price);
+        for(int c = 0; c < CHART_WIDTH; c++) {
+            char ch = grid[r][c];
+            int col = color_grid[r][c];
+            if(col == 1) printf(C_CYAN "%c" C_RESET, ch);
+            else if(col == 2) printf(C_YELLOW "%c" C_RESET, ch);
+            else if(col == 3) printf(C_GREEN "%c" C_RESET, ch);
+            else if(col == 4) printf(C_RED "%c" C_RESET, ch);
+            else printf("%c", ch);
+        }
+        printf(" |\n");
+    }
+    printf("         +" );
+    for(int c=0; c<CHART_WIDTH; c++) printf("-");
+    printf("+\n");
 }
 
 // Trading execution
@@ -111,75 +191,75 @@ void print_pos(Trader *t, double price, const char* name) {
 
 // Mode 1: Live Simulation
 void run_live_sim() {
-    printf("\033[H\033[J"); // Clear
-    printf(C_CYAN "=== TurtleSim : Live Brownian Motion Game ===" C_RESET "\n");
-    printf("Controls: " C_GREEN "[B]" C_RESET " Buy/Long  " C_RED "[S]" C_RESET " Sell/Short  " C_YELLOW "[C]" C_RESET " Close Position\n");
-    printf("Goal: Beat the Donchian Channel Bot over %d ticks!\n\n", MAX_TICKS);
+    show_instructions(0, "");
     
     enable_raw_mode();
     
     Trader bot = {FLAT, 0, 0, 0, 0, 0, {0}};
     Trader human = {FLAT, 0, 0, 0, 0, 0, {0}};
     
-    double history[MAX_TICKS + 20];
+    double history[MAX_DATA_POINTS];
+    double upper_hist[MAX_DATA_POINTS];
+    double lower_hist[MAX_DATA_POINTS];
+    char actions[MAX_DATA_POINTS];
+    memset(actions, 0, sizeof(actions));
+    
     double current_price = 100.0;
     
-    // Seed initial window to prevent immediate breakout
     for(int i = 0; i < WINDOW_SIZE; i++) {
         history[i] = current_price;
+        upper_hist[i] = current_price;
+        lower_hist[i] = current_price;
     }
     
     int t = WINDOW_SIZE;
     int end_t = t + MAX_TICKS;
     
-    while (t < end_t) {
-        // Brownian motion: drift=0.05, std=1.0
+    while (t < end_t && t < MAX_DATA_POINTS) {
         current_price += randn(0.05, 1.0);
         history[t] = current_price;
         
-        // Donchian channel calc (lookback previous WINDOW_SIZE periods)
         double upper = history[t-1], lower = history[t-1];
         for (int i = t - WINDOW_SIZE; i < t; i++) {
             if (history[i] > upper) upper = history[i];
             if (history[i] < lower) lower = history[i];
         }
+        upper_hist[t] = upper;
+        lower_hist[t] = lower;
         
-        char human_marker = ' ';
-        // Human input
-        struct timeval tv = {0, 300000}; // 300ms per tick
+        struct timeval tv = {0, 300000}; 
         fd_set fds;
         FD_ZERO(&fds);
         FD_SET(STDIN_FILENO, &fds);
         
         if (select(STDIN_FILENO + 1, &fds, NULL, NULL, &tv) > 0) {
             char c;
-            read(STDIN_FILENO, &c, 1);
-            if (c == 'b' || c == 'B') { execute_trade(&human, current_price, LONG); human_marker = '^'; }
-            if (c == 's' || c == 'S') { execute_trade(&human, current_price, SHORT); human_marker = 'v'; }
-            if (c == 'c' || c == 'C') { execute_trade(&human, current_price, FLAT); human_marker = 'o'; }
+            if (read(STDIN_FILENO, &c, 1) > 0) {
+                if (c == 'b' || c == 'B') { execute_trade(&human, current_price, LONG); actions[t] = 'B'; }
+                if (c == 's' || c == 'S') { execute_trade(&human, current_price, SHORT); actions[t] = 'S'; }
+                if (c == 'c' || c == 'C') { execute_trade(&human, current_price, FLAT); actions[t] = 'C'; }
+            }
         }
         
-        // Bot logic (Turtle)
         if (current_price > upper && bot.pos != LONG) execute_trade(&bot, current_price, LONG);
         else if (current_price < lower && bot.pos != SHORT) execute_trade(&bot, current_price, SHORT);
         
-        // Render
-        printf("\r\033[K"); // Clear line
-        draw_chart(current_price, lower, upper, 80.0, 140.0, human_marker);
+        printf("\033[H\033[J"); // Clear screen
+        printf(C_CYAN "=== TurtleSim : Live Brownian Motion Game ===" C_RESET "\n");
+        draw_chart_2d(history, upper_hist, lower_hist, actions, t);
+        printf("\n");
         print_pos(&human, current_price, "Human");
         print_pos(&bot, current_price, "Bot");
-        printf("\033[2A\r"); // Move up 2 lines
         
         t++;
     }
     
     disable_raw_mode();
     
-    // Close positions
     execute_trade(&bot, current_price, FLAT);
     execute_trade(&human, current_price, FLAT);
     
-    printf("\n\n\n" C_CYAN "=== FINAL SCOREBOARD ===" C_RESET "\n");
+    printf("\n\n" C_CYAN "=== FINAL SCOREBOARD ===" C_RESET "\n");
     printf("Human -> PnL: %7.2f | Trades: %d | W/L: %d/%d\n", human.realized_pnl, human.trades, human.wins, human.losses);
     printf("Bot   -> PnL: %7.2f | Trades: %d | W/L: %d/%d\n", bot.realized_pnl, bot.trades, bot.wins, bot.losses);
     if (human.realized_pnl > bot.realized_pnl) printf(C_GREEN "You beat the Bot!\n" C_RESET);
@@ -216,59 +296,74 @@ void run_backtest(const char* target_asset) {
         return;
     }
     
-    Trader bot = {FLAT, 0, 0, 0, 0, 0, {0}};
-    double peak_pnl = 0.0, max_dd = 0.0;
-    double min_price = history[0], max_price = history[0];
+    show_instructions(1, target_asset);
     
-    for (int i = 0; i < n; i++) {
-        if (history[i] > max_price) max_price = history[i];
-        if (history[i] < min_price) min_price = history[i];
+    enable_raw_mode();
+    
+    Trader bot = {FLAT, 0, 0, 0, 0, 0, {0}};
+    Trader human = {FLAT, 0, 0, 0, 0, 0, {0}};
+    
+    double upper_hist[MAX_DATA_POINTS];
+    double lower_hist[MAX_DATA_POINTS];
+    char actions[MAX_DATA_POINTS];
+    memset(actions, 0, sizeof(actions));
+    
+    for(int i = 0; i < WINDOW_SIZE && i < n; i++) {
+        upper_hist[i] = history[i];
+        lower_hist[i] = history[i];
     }
     
-    printf("\n" C_CYAN "--- Backtesting %s ---" C_RESET "\n", target_asset);
+    int t = WINDOW_SIZE;
     
-    for (int t = WINDOW_SIZE; t < n; t++) {
+    while (t < n) {
         double current_price = history[t];
-        double upper = history[t-1], lower = history[t-1];
         
+        double upper = history[t-1], lower = history[t-1];
         for (int i = t - WINDOW_SIZE; i < t; i++) {
             if (history[i] > upper) upper = history[i];
             if (history[i] < lower) lower = history[i];
         }
+        upper_hist[t] = upper;
+        lower_hist[t] = lower;
         
-        char marker = ' ';
-        if (current_price > upper && bot.pos != LONG) {
-            execute_trade(&bot, current_price, LONG);
-            marker = '^';
-        } else if (current_price < lower && bot.pos != SHORT) {
-            execute_trade(&bot, current_price, SHORT);
-            marker = 'v';
+        struct timeval tv = {0, 300000}; 
+        fd_set fds;
+        FD_ZERO(&fds);
+        FD_SET(STDIN_FILENO, &fds);
+        
+        if (select(STDIN_FILENO + 1, &fds, NULL, NULL, &tv) > 0) {
+            char c;
+            if (read(STDIN_FILENO, &c, 1) > 0) {
+                if (c == 'b' || c == 'B') { execute_trade(&human, current_price, LONG); actions[t] = 'B'; }
+                if (c == 's' || c == 'S') { execute_trade(&human, current_price, SHORT); actions[t] = 'S'; }
+                if (c == 'c' || c == 'C') { execute_trade(&human, current_price, FLAT); actions[t] = 'C'; }
+            }
         }
         
-        double current_pnl = bot.realized_pnl + get_unrealized(&bot, current_price);
-        if (current_pnl > peak_pnl) peak_pnl = current_pnl;
-        double dd = peak_pnl - current_pnl;
-        if (dd > max_dd) max_dd = dd;
+        if (current_price > upper && bot.pos != LONG) execute_trade(&bot, current_price, LONG);
+        else if (current_price < lower && bot.pos != SHORT) execute_trade(&bot, current_price, SHORT);
         
-        draw_chart(current_price, lower, upper, min_price - 5, max_price + 5, marker);
+        printf("\033[H\033[J"); // Clear screen
+        printf(C_CYAN "=== TurtleSim : Historical Backtest (%s) ===" C_RESET "\n", target_asset);
+        draw_chart_2d(history, upper_hist, lower_hist, actions, t);
+        printf("\n");
+        print_pos(&human, current_price, "Human");
+        print_pos(&bot, current_price, "Bot");
+        
+        t++;
     }
     
-    execute_trade(&bot, history[n-1], FLAT);
+    disable_raw_mode();
     
-    // Calc Sharpe
-    double sum_ret = 0, sum_sq = 0;
-    for(int i=0; i<bot.trades; i++) sum_ret += bot.returns[i];
-    double mean_ret = bot.trades > 0 ? sum_ret / bot.trades : 0;
-    for(int i=0; i<bot.trades; i++) sum_sq += pow(bot.returns[i] - mean_ret, 2);
-    double std_ret = bot.trades > 1 ? sqrt(sum_sq / (bot.trades - 1)) : 1;
-    double sharpe = (std_ret > 0) ? (mean_ret / std_ret) * sqrt(bot.trades) : 0; // rough annualized approx
+    double final_price = history[n-1];
+    execute_trade(&bot, final_price, FLAT);
+    execute_trade(&human, final_price, FLAT);
     
-    printf("\n" C_CYAN "--- BACKTEST RESULTS ---" C_RESET "\n");
-    printf("Total Trades: %d\n", bot.trades);
-    printf("Win/Loss: %d / %d\n", bot.wins, bot.losses);
-    printf("Total Return (Abs): %.2f\n", bot.realized_pnl);
-    printf("Max Drawdown: %.2f\n", max_dd);
-    printf("Est. Sharpe Ratio: %.2f\n", sharpe);
+    printf("\n\n" C_CYAN "=== FINAL SCOREBOARD ===" C_RESET "\n");
+    printf("Human -> PnL: %7.2f | Trades: %d | W/L: %d/%d\n", human.realized_pnl, human.trades, human.wins, human.losses);
+    printf("Bot   -> PnL: %7.2f | Trades: %d | W/L: %d/%d\n", bot.realized_pnl, bot.trades, bot.wins, bot.losses);
+    if (human.realized_pnl > bot.realized_pnl) printf(C_GREEN "You beat the Bot!\n" C_RESET);
+    else printf(C_RED "The Bot wins!\n" C_RESET);
 }
 
 int main(int argc, char *argv[]) {

@@ -24,6 +24,7 @@ job control via POSIX signals. Each application is a standalone binary.
 | **Notes** | Persistent plaintext note storage backed by `termiverse_notes.txt`, with flock-based file locking for safe concurrent access |
 | **Tetris** | Terminal Tetris with ghost piece, line scoring, and audio via libao |
 | **Snake** | Terminal Snake rendered with ncurses |
+| **TurtleSim** | Interactive trading simulator with a custom 2D console chart rendering, support for real-world historical data (Yahoo Finance) and synthetic Brownian motion |
 
 ## About the creators
 
@@ -68,8 +69,8 @@ above. WSL2 provides a full Linux kernel, so no code changes are necessary.
 | `chat <name>` | Join the global chat room |
 | `calc <num> <op> <num>` | Calculator (e.g. `calc 10 + 5`) |
 | `launch alarm <sec> <msg>` | Set a countdown timer (e.g. `launch alarm 5 "Run"`) |
-| `launch turtlesim live` | Play the live trading simulation game against a Bot |
-| `launch turtlesim backtest <Asset>` | Run the backtester on data (e.g., `launch turtlesim backtest GOLD`) |
+| `launch turtlesim live` | Play the live trading simulation game against a Bot (using synthetic Brownian motion) |
+| `launch turtlesim backtest <Asset>` | Play the interactive trading game on historical real-world data (e.g., `GOLD`, `AAPL`, `TSLA` from Yahoo Finance) |
 | `launch notes <cmd>` | Notes app — subcommands: `add "text"`, `read`, `clear` |
 | `launch snake` | Snake game |
 | `launch tetris` | Tetris game |
