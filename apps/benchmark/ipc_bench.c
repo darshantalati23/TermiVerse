@@ -93,16 +93,17 @@ int main(int argc, char *argv[]) {
         }
         write(s_fd, &clients[i].c, sizeof(client_t));
         close(s_fd);
-    }
-    
-    usleep(500000); // 0.5s for server to open pipes
-    
-    for(int i=0; i<NUM_CLIENTS; i++) {
-        clients[i].c.read_fd = open(clients[i].c.read_fifo, O_RDONLY | O_NONBLOCK);
-        clients[i].c.write_fd = open(clients[i].c.write_fifo, O_WRONLY | O_NONBLOCK);
         
-        if (clients[i].c.read_fd == -1 || clients[i].c.write_fd == -1) {
-            printf("\033[1;31mFailed to open private pipes for client %d\033[0m\n", i);
+        // Wait for the server to process and open its ends of the pipes (blocking, exactly like real client)
+        clients[i].c.read_fd = open(clients[i].c.read_fifo, O_RDONLY);
+        if (clients[i].c.read_fd == -1) {
+            printf("\033[1;31mFailed to open read_fifo for client %d\033[0m\n", i);
+            return 1;
+        }
+        
+        clients[i].c.write_fd = open(clients[i].c.write_fifo, O_WRONLY);
+        if (clients[i].c.write_fd == -1) {
+            printf("\033[1;31mFailed to open write_fifo for client %d\033[0m\n", i);
             return 1;
         }
     }
