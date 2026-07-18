@@ -216,13 +216,19 @@ void run_live_sim() {
     int end_t = t + MAX_TICKS;
     
     while (t < end_t && t < MAX_DATA_POINTS) {
-        current_price += randn(0.05, 1.0);
+        double log_return = randn(log(1.0005), 0.01);
+        current_price *= exp(log_return);
         history[t] = current_price;
         
         double upper = history[t-1], lower = history[t-1];
         for (int i = t - WINDOW_SIZE; i < t; i++) {
             if (history[i] > upper) upper = history[i];
             if (history[i] < lower) lower = history[i];
+        }
+        double upper_10 = history[t-1], lower_10 = history[t-1];
+        for (int i = t - 10; i < t; i++) {
+            if (history[i] > upper_10) upper_10 = history[i];
+            if (history[i] < lower_10) lower_10 = history[i];
         }
         upper_hist[t] = upper;
         lower_hist[t] = lower;
@@ -241,8 +247,19 @@ void run_live_sim() {
             }
         }
         
-        if (current_price > upper && bot.pos != LONG) execute_trade(&bot, current_price, LONG);
-        else if (current_price < lower && bot.pos != SHORT) execute_trade(&bot, current_price, SHORT);
+        if (bot.pos == LONG && current_price < lower_10) {
+            execute_trade(&bot, current_price, FLAT);
+        } else if (bot.pos == SHORT && current_price > upper_10) {
+            execute_trade(&bot, current_price, FLAT);
+        }
+        
+        if (bot.pos == FLAT) {
+            if (current_price > upper) {
+                execute_trade(&bot, current_price, LONG);
+            } else if (current_price < lower) {
+                execute_trade(&bot, current_price, SHORT);
+            }
+        }
         
         printf("\033[H\033[J"); // Clear screen
         printf(C_CYAN "=== TurtleSim : Live Brownian Motion Game ===" C_RESET "\n");
@@ -323,6 +340,11 @@ void run_backtest(const char* target_asset) {
             if (history[i] > upper) upper = history[i];
             if (history[i] < lower) lower = history[i];
         }
+        double upper_10 = history[t-1], lower_10 = history[t-1];
+        for (int i = t - 10; i < t; i++) {
+            if (history[i] > upper_10) upper_10 = history[i];
+            if (history[i] < lower_10) lower_10 = history[i];
+        }
         upper_hist[t] = upper;
         lower_hist[t] = lower;
         
@@ -340,8 +362,19 @@ void run_backtest(const char* target_asset) {
             }
         }
         
-        if (current_price > upper && bot.pos != LONG) execute_trade(&bot, current_price, LONG);
-        else if (current_price < lower && bot.pos != SHORT) execute_trade(&bot, current_price, SHORT);
+        if (bot.pos == LONG && current_price < lower_10) {
+            execute_trade(&bot, current_price, FLAT);
+        } else if (bot.pos == SHORT && current_price > upper_10) {
+            execute_trade(&bot, current_price, FLAT);
+        }
+        
+        if (bot.pos == FLAT) {
+            if (current_price > upper) {
+                execute_trade(&bot, current_price, LONG);
+            } else if (current_price < lower) {
+                execute_trade(&bot, current_price, SHORT);
+            }
+        }
         
         printf("\033[H\033[J"); // Clear screen
         printf(C_CYAN "=== TurtleSim : Historical Backtest (%s) ===" C_RESET "\n", target_asset);
